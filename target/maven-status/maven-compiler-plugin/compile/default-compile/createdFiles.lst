@@ -1,0 +1,7 @@
+com\fdsi\mvp\CommandValidator$Resultado.class
+com\fdsi\mvp\DbInit.class
+com\fdsi\mvp\SqlValidator.class
+com\fdsi\mvp\SqlValidator$Resultado.class
+com\fdsi\mvp\App.class
+com\fdsi\mvp\CommandValidator.class
+com\fdsi\mvp\LlmClient.class

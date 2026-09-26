@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <groupId>com.fdsi</groupId>
+  <artifactId>mvp-llm-output-handling</artifactId>
+  <version>1.0.0</version>
+  <packaging>jar</packaging>
+
+  <properties>
+    <maven.compiler.source>17</maven.compiler.source>
+    <maven.compiler.target>17</maven.compiler.target>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+
+  <dependencies>
+    <!-- Driver JDBC para SQLite -->
+    <dependency>
+      <groupId>org.xerial</groupId>
+      <artifactId>sqlite-jdbc</artifactId>
+      <version>3.46.1.0</version>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <!-- Permite ejecutar directamente con: mvn exec:java -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>exec-maven-plugin</artifactId>
+        <version>3.5.0</version>
+        <configuration>
+          <mainClass>com.fdsi.mvp.App</mainClass>
+        </configuration>
+      </plugin>
+      <!-- Empaqueta el jar con TODAS las dependencias incluidas, para poder
+           correr con: java -jar target/mvp-llm-output-handling-1.0.0-jar-with-dependencies.jar -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-assembly-plugin</artifactId>
+        <version>3.7.1</version>
+        <configuration>
+          <archive>
+            <manifest>
+              <mainClass>com.fdsi.mvp.App</mainClass>
+            </manifest>
+          </archive>
+          <descriptorRefs>
+            <descriptorRef>jar-with-dependencies</descriptorRef>
+          </descriptorRefs>
+        </configuration>
+        <executions>
+          <execution>
+            <phase>package</phase>
+            <goals><goal>single</goal></goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>
