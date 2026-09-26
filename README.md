@@ -7,24 +7,22 @@ de Seguridad, con los dos vectores marcados en el tablero de correcciones:
 Verificado: el código compila con `javac`/`mvn` sin errores.
 
 ## Requisitos
+- **Java JDK 17+**
+- **Maven** (3.8+)
+- *(Opcional)* API Key de Anthropic. Si no se proporciona, el proyecto incluye un **modo de simulación local** con respuestas precargadas para demostraciones sin costo.
+---
+## Instalación y Ejecución
+### Opción 1: Ejecución rápida con Maven (Recomendada para desarrollo)
+1. **Inicializar la base de datos de prueba:**
+   ```bash
+   mvn compile exec:java -Dexec.mainClass="com.fdsi.mvp.DbInit"
+   ```
+2. **Iniciar el servidor web:**
+   ```bash
+   mvn compile exec:java
+   ```
+---
 
-- JDK 17+
-- Maven
-- Una API key de Anthropic con crédito
-
-## Instalación y ejecución
-
-```bash
-cd mvp_java
-mvn package
-
-# Crear la base de datos de juguete
-java -cp target/mvp-llm-output-handling-1.0.0-jar-with-dependencies.jar com.fdsi.mvp.DbInit
-
-# Correr el servidor
-export ANTHROPIC_API_KEY=tu_llave_aqui
-java -jar target/mvp-llm-output-handling-1.0.0-jar-with-dependencies.jar
-```
 
 Abrir **http://localhost:8000**.
 
@@ -37,7 +35,6 @@ Abrir **http://localhost:8000**.
 
 Esto corresponde exactamente a la sección 7 del informe: 7.2 (validación
 estructurada), 7.3 (mínimo privilegio) y 7.4 (sandboxing + allow-list).
-
 ## Nota de seguridad
 
 Los payloads de la demo son intencionalmente inofensivos y locales (afectan
