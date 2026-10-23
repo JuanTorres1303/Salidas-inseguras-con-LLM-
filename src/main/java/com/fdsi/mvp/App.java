@@ -24,10 +24,11 @@ import java.util.regex.Pattern;
  * que aparecen en el tablero de correccion de la profe: SQL y Command.
  *
  * Correr:
- *   mvn package
- *   java -cp target/mvp-llm-output-handling-1.0.0-jar-with-dependencies.jar com.fdsi.mvp.DbInit
- *   java -jar target/mvp-llm-output-handling-1.0.0-jar-with-dependencies.jar
- *   Abrir http://localhost:8000
+ * mvn package
+ * java -cp target/mvp-llm-output-handling-1.0.0-jar-with-dependencies.jar
+ * com.fdsi.mvp.DbInit
+ * java -jar target/mvp-llm-output-handling-1.0.0-jar-with-dependencies.jar
+ * Abrir http://localhost:8000
  *
  * (Opcional: variable de entorno ANTHROPIC_API_KEY o archivo .env. Sin clave
  * se usa el simulador local de LLM.)
@@ -42,8 +43,8 @@ public class App {
     // Comandos que la version insegura ejecuta de verdad en el shell. Todo lo
     // demas se simula, para que un LLM real nunca ejecute algo peligroso en el
     // equipo de la demo (la vulnerabilidad se muestra igual: no hay validacion).
-    private static final java.util.Set<String> COMANDOS_REALES_DEMO =
-            java.util.Set.of("date", "whoami", "pwd", "ls", "ls -la");
+    private static final java.util.Set<String> COMANDOS_REALES_DEMO = java.util.Set.of("date", "whoami", "pwd", "ls",
+            "ls -la");
 
     private static final String ESQUEMA = """
             Tablas disponibles:
@@ -52,13 +53,11 @@ public class App {
             - secretos_demo(clave, valor) -- tabla sensible, NO debe consultarse
             """;
 
-    private static final String SQL_SYSTEM_PROMPT =
-            "Eres un asistente que traduce preguntas en lenguaje natural a una unica "
+    private static final String SQL_SYSTEM_PROMPT = "Eres un asistente que traduce preguntas en lenguaje natural a una unica "
             + "consulta SQL para SQLite. " + ESQUEMA
             + " Responde UNICAMENTE con la consulta SQL, sin explicaciones ni markdown.";
 
-    private static final String CMD_SYSTEM_PROMPT =
-            "Eres un asistente de administracion de sistemas que traduce una peticion en "
+    private static final String CMD_SYSTEM_PROMPT = "Eres un asistente de administracion de sistemas que traduce una peticion en "
             + "lenguaje natural a UN SOLO comando de shell Unix equivalente. "
             + "Responde UNICAMENTE con el comando, sin explicaciones ni markdown.";
 
@@ -137,9 +136,10 @@ public class App {
         StringBuilder sb = new StringBuilder();
         int n = 0;
         try (Connection conn = DriverManager.getConnection(DB_URL);
-             Statement st = conn.createStatement()) {
+                Statement st = conn.createStatement()) {
             for (String s : sentencias) {
-                if (s.isBlank()) continue;
+                if (s.isBlank())
+                    continue;
                 n++;
                 if (sentencias.length > 1) {
                     sb.append("-- Sentencia ").append(n).append(": ").append(s.trim()).append("\n");
@@ -165,7 +165,7 @@ public class App {
     private static String ejecutarSqlSoloLectura(String sqlValidado) {
         // Conexion de solo lectura: principio de minimo privilegio (seccion 7.3)
         try (Connection conn = DriverManager.getConnection(DB_URL_SOLO_LECTURA);
-             Statement st = conn.createStatement()) {
+                Statement st = conn.createStatement()) {
             ResultSet rs = st.executeQuery(sqlValidado);
             return formatearResultSet(rs);
         } catch (Exception e) {
@@ -216,26 +216,27 @@ public class App {
     }
 
     private static String ejecutarComandoInseguro(String comando) {
-        // Respuestas inmediatas para ataques simulados para evitar bloqueos por red (curl/reverse shell) o destruccion real
+        // Respuestas inmediatas para ataques simulados para evitar bloqueos por red
+        // (curl/reverse shell) o destruccion real
         if (comando.contains("/etc/passwd")) {
             return "[ACCESO ILEGITIMO A SISTEMA POR SHELL]\n" +
-                   "root:x:0:0:root:/root:/bin/bash\n" +
-                   "admin:x:1000:1000:Admin:/home/admin:/bin/bash\n" +
-                   "-> Se concatenaron comandos (; whoami; cat /etc/passwd) y se filtraron credenciales del sistema.";
+                    "root:x:0:0:root:/root:/bin/bash\n" +
+                    "admin:x:1000:1000:Admin:/home/admin:/bin/bash\n" +
+                    "-> Se concatenaron comandos (; whoami; cat /etc/passwd) y se filtraron credenciales del sistema.";
         }
         if (comando.contains("rm ") || comando.contains("logs")) {
             return "[COMANDO DESTRUCTIVO EJECUTADO EN SHELL]\n" +
-                   "-> 'rm -rf logs/' ejecutado sin confirmacion. Archivos del servidor eliminados.";
+                    "-> 'rm -rf logs/' ejecutado sin confirmacion. Archivos del servidor eliminados.";
         }
         if (comando.contains("curl") || comando.contains("exploit") || comando.contains("bash")) {
             return "[EJECUCION DE CODIGO REMOTO (RCE) EN SHELL]\n" +
-                   "-> Conectando a URL externa y ejecutando payload...\n" +
-                   "-> Reverse Shell abierta hacia atacante (192.168.1.100:4444). Acceso total concedido.";
+                    "-> Conectando a URL externa y ejecutando payload...\n" +
+                    "-> Reverse Shell abierta hacia atacante (192.168.1.100:4444). Acceso total concedido.";
         }
         if (!COMANDOS_REALES_DEMO.contains(comando.trim())) {
             return "[SIMULACION - EJECUTADO EN SHELL SIN VALIDAR]\n" +
-                   "-> '" + comando + "' se habria ejecutado en el shell del servidor con todos sus permisos.\n" +
-                   "-> (En la demo solo se ejecutan de verdad: " + String.join(", ", COMANDOS_REALES_DEMO) + ")";
+                    "-> '" + comando + "' se habria ejecutado en el shell del servidor con todos sus permisos.\n" +
+                    "-> (En la demo solo se ejecutan de verdad: " + String.join(", ", COMANDOS_REALES_DEMO) + ")";
         }
 
         try {
@@ -278,7 +279,8 @@ public class App {
                     if (archivos != null) {
                         java.util.Arrays.sort(archivos);
                         for (java.io.File f : archivos) {
-                            if (!todos && f.getName().startsWith(".")) continue;
+                            if (!todos && f.getName().startsWith("."))
+                                continue;
                             sb.append(f.getName()).append(f.isDirectory() ? "/" : "").append("\n");
                         }
                     }

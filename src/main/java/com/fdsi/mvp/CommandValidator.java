@@ -18,14 +18,15 @@ public class CommandValidator {
     // (-l, -a, -la, -lh...). Ninguna ruta, para no listar directorios del sistema.
     private static final String OPCIONES_LS = "-[laht1]+";
 
-    public record Resultado(boolean valido, String mensaje, List<String> comando) {}
+    public record Resultado(boolean valido, String mensaje, List<String> comando) {
+    }
 
     public static Resultado validar(String comandoGenerado) {
         String limpio = comandoGenerado.trim();
 
         // Cualquier metacaracter de shell se rechaza de una vez: si aparece,
         // significa que el LLM intento encadenar o inyectar algo mas.
-        String[] prohibidos = {";", "&&", "||", "&", "|", "`", "$(", ">", "<", "\n"};
+        String[] prohibidos = { ";", "&&", "||", "&", "|", "`", "$(", ">", "<", "\n" };
         for (String p : prohibidos) {
             if (limpio.contains(p)) {
                 return new Resultado(false, "Se rechaza: contiene un metacaracter de shell (" + p + ").", null);
@@ -44,7 +45,8 @@ public class CommandValidator {
 
         for (int i = 1; i < partes.length; i++) {
             if (!verbo.equals("ls") || !partes[i].matches(OPCIONES_LS)) {
-                return new Resultado(false, "Se rechaza: argumento no permitido para '" + verbo + "' (" + partes[i] + ").", null);
+                return new Resultado(false,
+                        "Se rechaza: argumento no permitido para '" + verbo + "' (" + partes[i] + ").", null);
             }
         }
 

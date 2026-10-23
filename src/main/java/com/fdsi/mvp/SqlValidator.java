@@ -23,10 +23,11 @@ public class SqlValidator {
     // las subconsultas, que se capturan en su propio FROM.
     private static final Pattern CLAUSULA_TABLAS = Pattern.compile(
             "\\b(?:from|join)\\b(.*?)(?=\\b(?:where|group|order|limit|having|union|except|intersect"
-            + "|join|on|using|natural|left|right|inner|cross|outer|full|select|from|window)\\b|[()]|$)",
+                    + "|join|on|using|natural|left|right|inner|cross|outer|full|select|from|window)\\b|[()]|$)",
             Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
 
-    public record Resultado(boolean valida, String mensajeOSql) {}
+    public record Resultado(boolean valida, String mensajeOSql) {
+    }
 
     public static Resultado validar(String sqlOriginal) {
         String sql = sqlOriginal.trim();
