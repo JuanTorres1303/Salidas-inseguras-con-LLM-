@@ -13,6 +13,9 @@
     <maven.compiler.source>17</maven.compiler.source>
     <maven.compiler.target>17</maven.compiler.target>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <!-- Clase por defecto de "mvn exec:java". Como es una propiedad, se puede
+         cambiar desde la linea de comandos: -Dexec.mainClass=com.fdsi.mvp.DbInit -->
+    <exec.mainClass>com.fdsi.mvp.App</exec.mainClass>
   </properties>
 
   <dependencies>
@@ -21,6 +24,12 @@
       <groupId>org.xerial</groupId>
       <artifactId>sqlite-jdbc</artifactId>
       <version>3.46.1.0</version>
+    </dependency>
+    <!-- Logger vacio para sqlite-jdbc: evita los avisos "SLF4J: Failed to load class" en consola -->
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-nop</artifactId>
+      <version>1.7.36</version>
     </dependency>
   </dependencies>
 
@@ -31,9 +40,6 @@
         <groupId>org.codehaus.mojo</groupId>
         <artifactId>exec-maven-plugin</artifactId>
         <version>3.5.0</version>
-        <configuration>
-          <mainClass>com.fdsi.mvp.App</mainClass>
-        </configuration>
       </plugin>
       <!-- Empaqueta el jar con TODAS las dependencias incluidas, para poder
            correr con: java -jar target/mvp-llm-output-handling-1.0.0-jar-with-dependencies.jar -->

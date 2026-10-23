@@ -14,6 +14,10 @@ public class CommandValidator {
 
     private static final Set<String> COMANDOS_PERMITIDOS = Set.of("ls", "pwd", "date", "whoami");
 
+    // Unico argumento aceptado: opciones de ls sobre el directorio actual
+    // (-l, -a, -la, -lh...). Ninguna ruta, para no listar directorios del sistema.
+    private static final String OPCIONES_LS = "-[laht1]+";
+
     public record Resultado(boolean valido, String mensaje, List<String> comando) {}
 
     public static Resultado validar(String comandoGenerado) {
@@ -21,21 +25,27 @@ public class CommandValidator {
 
         // Cualquier metacaracter de shell se rechaza de una vez: si aparece,
         // significa que el LLM intento encadenar o inyectar algo mas.
-        String[] prohibidos = {";", "&&", "||", "|", "`", "$(", ">", "<", "\n"};
+        String[] prohibidos = {";", "&&", "||", "&", "|", "`", "$(", ">", "<", "\n"};
         for (String p : prohibidos) {
             if (limpio.contains(p)) {
                 return new Resultado(false, "Se rechaza: contiene un metacaracter de shell (" + p + ").", null);
             }
         }
 
-        String[] partes = limpio.split("\\s+");
-        if (partes.length == 0) {
+        if (limpio.isEmpty()) {
             return new Resultado(false, "Se rechaza: comando vacio.", null);
         }
+        String[] partes = limpio.split("\\s+");
 
         String verbo = partes[0];
         if (!COMANDOS_PERMITIDOS.contains(verbo)) {
             return new Resultado(false, "Se rechaza: '" + verbo + "' no esta en la allow-list.", null);
+        }
+
+        for (int i = 1; i < partes.length; i++) {
+            if (!verbo.equals("ls") || !partes[i].matches(OPCIONES_LS)) {
+                return new Resultado(false, "Se rechaza: argumento no permitido para '" + verbo + "' (" + partes[i] + ").", null);
+            }
         }
 
         // Se ejecuta SIN shell (ProcessBuilder recibe la lista ya separada),

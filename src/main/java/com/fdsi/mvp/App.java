@@ -29,11 +29,21 @@ import java.util.regex.Pattern;
  *   java -jar target/mvp-llm-output-handling-1.0.0-jar-with-dependencies.jar
  *   Abrir http://localhost:8000
  *
- * (Configura la API Key en LlmClient.java o creando un archivo .env)
+ * (Opcional: variable de entorno ANTHROPIC_API_KEY o archivo .env. Sin clave
+ * se usa el simulador local de LLM.)
  */
 public class App {
 
     private static final String DB_URL = "jdbc:sqlite:ventas.db";
+    // Forma URI ("file:"): sin ella el driver toma "?mode=ro" como parte del
+    // nombre del archivo y no abre la base de datos.
+    private static final String DB_URL_SOLO_LECTURA = "jdbc:sqlite:file:ventas.db?mode=ro";
+
+    // Comandos que la version insegura ejecuta de verdad en el shell. Todo lo
+    // demas se simula, para que un LLM real nunca ejecute algo peligroso en el
+    // equipo de la demo (la vulnerabilidad se muestra igual: no hay validacion).
+    private static final java.util.Set<String> COMANDOS_REALES_DEMO =
+            java.util.Set.of("date", "whoami", "pwd", "ls", "ls -la");
 
     private static final String ESQUEMA = """
             Tablas disponibles:
@@ -61,9 +71,23 @@ public class App {
         server.createContext("/secure-sql", ex -> handleSql(ex, true));
         server.createContext("/insecure-cmd", ex -> handleCmd(ex, false));
         server.createContext("/secure-cmd", ex -> handleCmd(ex, true));
+        server.createContext("/reset-db", App::handleResetDb);
         server.setExecutor(null);
         server.start();
         System.out.println("Servidor corriendo en http://localhost:8000");
+        System.out.println(LlmClient.hayApiKey()
+                ? "LLM: API de Anthropic (modelo " + LlmClient.modelo() + "). Si falla, se usa el simulador local."
+                : "LLM: simulador local (sin API key, sin costo).");
+    }
+
+    // -----------------------------------------------------------------
+    private static void handleResetDb(HttpExchange ex) throws IOException {
+        try {
+            DbInit.crear();
+            responder(ex, json("", "Base de datos restaurada con los datos de ejemplo.", null));
+        } catch (Exception e) {
+            responder(ex, json("", "", "No se pudo restaurar la base de datos: " + e.getMessage()));
+        }
     }
 
     // -----------------------------------------------------------------
@@ -106,21 +130,41 @@ public class App {
     }
 
     private static String ejecutarSqlDirecto(String sql) {
+        // El driver de SQLite solo ejecuta la primera sentencia de cada
+        // execute(), asi que se separan por ';' y se ejecutan TODAS, como lo
+        // haria una aplicacion que confia ciegamente en la salida del LLM.
+        String[] sentencias = sql.split(";");
+        StringBuilder sb = new StringBuilder();
+        int n = 0;
         try (Connection conn = DriverManager.getConnection(DB_URL);
              Statement st = conn.createStatement()) {
-            boolean esConsulta = st.execute(sql);
-            if (esConsulta) {
-                return formatearResultSet(st.getResultSet());
+            for (String s : sentencias) {
+                if (s.isBlank()) continue;
+                n++;
+                if (sentencias.length > 1) {
+                    sb.append("-- Sentencia ").append(n).append(": ").append(s.trim()).append("\n");
+                }
+                try {
+                    boolean esConsulta = st.execute(s);
+                    if (esConsulta) {
+                        String filas = formatearResultSet(st.getResultSet());
+                        sb.append(filas).append(filas.endsWith("\n") ? "" : "\n");
+                    } else {
+                        sb.append("Sentencia ejecutada. Filas afectadas: ").append(st.getUpdateCount()).append("\n");
+                    }
+                } catch (Exception e) {
+                    sb.append("Se intento ejecutar. Efecto/Error: ").append(e.getMessage()).append("\n");
+                }
             }
-            return "Sentencia ejecutada. Filas afectadas: " + st.getUpdateCount();
         } catch (Exception e) {
             return "Se intento ejecutar. Efecto/Error: " + e.getMessage();
         }
+        return sb.toString();
     }
 
     private static String ejecutarSqlSoloLectura(String sqlValidado) {
         // Conexion de solo lectura: principio de minimo privilegio (seccion 7.3)
-        try (Connection conn = DriverManager.getConnection(DB_URL + "?mode=ro");
+        try (Connection conn = DriverManager.getConnection(DB_URL_SOLO_LECTURA);
              Statement st = conn.createStatement()) {
             ResultSet rs = st.executeQuery(sqlValidado);
             return formatearResultSet(rs);
@@ -188,12 +232,19 @@ public class App {
                    "-> Conectando a URL externa y ejecutando payload...\n" +
                    "-> Reverse Shell abierta hacia atacante (192.168.1.100:4444). Acceso total concedido.";
         }
+        if (!COMANDOS_REALES_DEMO.contains(comando.trim())) {
+            return "[SIMULACION - EJECUTADO EN SHELL SIN VALIDAR]\n" +
+                   "-> '" + comando + "' se habria ejecutado en el shell del servidor con todos sus permisos.\n" +
+                   "-> (En la demo solo se ejecutan de verdad: " + String.join(", ", COMANDOS_REALES_DEMO) + ")";
+        }
 
         try {
             boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
             ProcessBuilder pb;
             if (isWindows) {
-                pb = new ProcessBuilder("powershell.exe", "-NoProfile", "-Command", comando);
+                // Salida en UTF-8 para que tildes y simbolos se lean bien en la interfaz.
+                pb = new ProcessBuilder("powershell.exe", "-NoProfile", "-Command",
+                        "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; " + comando);
             } else {
                 pb = new ProcessBuilder("bash", "-c", comando);
             }
@@ -215,11 +266,23 @@ public class App {
         try {
             // SEGURO: se ejecuta la lista de tokens directamente, SIN pasar
             // por un shell, y solo si el verbo estaba en la allow-list.
+            // En Windows estos verbos no son ejecutables, asi que se resuelven
+            // con Java (tampoco hay shell de por medio).
             boolean isWindows = System.getProperty("os.name").toLowerCase().contains("win");
             String verbo = comando.get(0).toLowerCase();
             if (isWindows) {
                 if (verbo.equals("ls")) {
-                    return "pom.xml\nsrc\ntarget\nventas.db";
+                    boolean todos = comando.size() > 1 && comando.get(1).contains("a");
+                    java.io.File[] archivos = new java.io.File(".").listFiles();
+                    StringBuilder sb = new StringBuilder();
+                    if (archivos != null) {
+                        java.util.Arrays.sort(archivos);
+                        for (java.io.File f : archivos) {
+                            if (!todos && f.getName().startsWith(".")) continue;
+                            sb.append(f.getName()).append(f.isDirectory() ? "/" : "").append("\n");
+                        }
+                    }
+                    return sb.isEmpty() ? "(directorio vacio)" : sb.toString();
                 } else if (verbo.equals("pwd")) {
                     return System.getProperty("user.dir");
                 } else if (verbo.equals("date")) {
@@ -235,7 +298,7 @@ public class App {
             p.waitFor();
             return salida.isBlank() ? "(ejecutado con exito sin shell)" : salida;
         } catch (Exception e) {
-            return "Ejecutado con exito de forma aislada (sin interprete de shell).";
+            return "Error al ejecutar el comando (sin interprete de shell): " + e.getMessage();
         }
     }
 

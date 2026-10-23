@@ -9,25 +9,28 @@ import java.util.regex.Pattern;
 
 /**
  * Wrapper minimo (sin librerias de JSON externas) para llamar a la API de
- * Anthropic (Claude). Requiere la variable de entorno ANTHROPIC_API_KEY.
- * Opcional: MODEL_NAME (por defecto claude-sonnet-5).
+ * Anthropic (Claude). La clave se toma de la variable de entorno
+ * ANTHROPIC_API_KEY (o de un archivo .env); nunca se escribe en el codigo.
+ * Sin clave se usa el simulador local. Opcional: MODEL_NAME (por defecto claude-sonnet-5-5).
  */
 public class LlmClient {
 
     private static final String API_URL = "https://api.anthropic.com/v1/messages";
-    private static final String MODEL = System.getenv().getOrDefault("MODEL_NAME", "claude-sonnet-5");
+    private static final String MODEL = System.getenv().getOrDefault("MODEL_NAME", "claude-sonnet-5-5");
     private static final HttpClient HTTP = HttpClient.newHttpClient();
-
-    // Puedes pegar tu API Key directamente aqui si no deseas usar variables de entorno:
-    private static final String HARDCODED_API_KEY = "";
 
     // Extrae los valores de "text":"..." de la respuesta JSON de la API.
     private static final Pattern TEXT_FIELD = Pattern.compile("\"text\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
 
+    static boolean hayApiKey() {
+        return getApiKey() != null;
+    }
+
+    static String modelo() {
+        return MODEL;
+    }
+
     private static String getApiKey() {
-        if (HARDCODED_API_KEY != null && !HARDCODED_API_KEY.isBlank() && !HARDCODED_API_KEY.equals("tu_llave_aqui")) {
-            return HARDCODED_API_KEY.trim();
-        }
         String envKey = System.getenv("ANTHROPIC_API_KEY");
         if (envKey != null && !envKey.isBlank()) {
             return envKey.trim();
@@ -100,7 +103,7 @@ public class LlmClient {
 
     /**
      * Simulador de respuestas del LLM para escenarios de demostracion (OWASP LLM05).
-     * Permite probar ataques de prompt injection y respuestas normales sin costo ni API key.
+     * Permite probar los ataques y las respuestas normales sin costo ni API key.
      */
     private static String simulateLlm(String systemPrompt, String userPrompt) {
         String input = userPrompt.trim();
@@ -115,7 +118,7 @@ public class LlmClient {
                 lower.startsWith("update ") || lower.startsWith("alter ")) {
                 return input;
             }
-            // Ataques de inyeccion de prompt / extraccion de secretos / destruccion
+            // Peticiones maliciosas: destruccion / extraccion de secretos
             if (lower.contains("delete") || lower.contains("borrar") || lower.contains("eliminar")) {
                 return "DELETE FROM ventas;";
             }
