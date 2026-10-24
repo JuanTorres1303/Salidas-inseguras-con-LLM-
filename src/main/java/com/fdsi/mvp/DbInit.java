@@ -22,9 +22,14 @@ public class DbInit {
 
     /** Borra y vuelve a crear las tablas con los datos de ejemplo. */
     public static void crear() throws Exception {
+        crear("jdbc:sqlite:ventas.db");
+    }
+
+    /** Igual que crear(), en otra base de datos (el Benchmark usa una copia temporal). */
+    public static void crear(String url) throws Exception {
         Class.forName("org.sqlite.JDBC");
 
-        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:ventas.db");
+        try (Connection conn = DriverManager.getConnection(url);
                 Statement st = conn.createStatement()) {
 
             st.executeUpdate("DROP TABLE IF EXISTS ventas");

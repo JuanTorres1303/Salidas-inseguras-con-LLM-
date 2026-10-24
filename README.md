@@ -38,6 +38,9 @@ de ejecutarse.
   subconsultas, comandos en segundo plano y argumentos peligrosos.
 - **Base de datos de prueba** con 10 clientes, 30 ventas y credenciales ficticias como objetivo de
   los ataques, restaurable con un botón desde la interfaz.
+- **Medición automática de la seguridad:** un benchmark de 58 casos muestra que los ataques pasan de
+  un 97 % de éxito sin gateway a un **0 %** con gateway, con un 4,8 % de falsos positivos y menos de
+  10 microsegundos agregados por petición.
 - **Modo simulación:** funciona sin API key ni costo. Opcionalmente puede usar un LLM real.
 - **Demo segura:** los ataques de comandos más peligrosos se simulan y los de SQL afectan solo una
   base de datos local desechable.
@@ -65,7 +68,14 @@ versión insegura con la segura. Detener con `Ctrl+C`.
 Después de probar los ataques de borrado en la versión insegura, pulsar **"♻️ Restaurar base de
 datos"** en la interfaz (o repetir el paso 1).
 
+Para medir la seguridad (no necesita el servidor ni modifica `ventas.db`):
+
+```powershell
+mvn compile exec:java "-Dexec.mainClass=com.fdsi.mvp.Benchmark"
+```
+
 ## Más detalle
 
-La documentación completa del MVP (arquitectura, controles, casos de la demo, hallazgos de la
-revisión y guion de presentación) está en [`MVP.md`](MVP.md).
+La documentación completa del MVP (arquitectura, controles, casos de la demo, métricas,
+estadísticas, impacto en otros sistemas de la organización y guion de presentación) está en
+[`MVP.md`](MVP.md). El análisis costo-beneficio está en [`COSTOS.md`](COSTOS.md).

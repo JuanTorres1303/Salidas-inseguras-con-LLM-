@@ -10,7 +10,7 @@
 | Riesgo estudiado | OWASP Top 10 for LLM Applications 2025 — **LLM05: Improper Output Handling** |
 | Caso real de referencia | **CVE-2024-5565** (Vanna.AI): el SQL/código generado por el LLM se ejecutaba sin validar |
 | Vectores | **1. SQL Injection** · **2. Command Injection** |
-| Estado | Funcional y probado de punta a punta el 2026-10-22 (Windows 11, Java 23, Maven 3.9.12, modo simulación) |
+| Estado | Funcional y probado de punta a punta el 2026-10-22; medido con `Benchmark.java` el 2026-10-23: 0 % de ataques exitosos con gateway, 4,8 % de falsos positivos (§8) |
 
 ---
 
@@ -86,6 +86,7 @@ validación no se ejecuta.
 | `src/main/java/com/fdsi/mvp/SqlValidator.java` | Validación estructurada del SQL generado |
 | `src/main/java/com/fdsi/mvp/CommandValidator.java` | Allow-list de comandos y argumentos, rechazo de metacaracteres |
 | `src/main/java/com/fdsi/mvp/DbInit.java` | Crea `ventas.db`: 10 clientes, 30 ventas y la tabla ficticia `secretos_demo` |
+| `src/main/java/com/fdsi/mvp/Benchmark.java` | Medición automática: 58 casos etiquetados, métricas de eficacia, usabilidad y rendimiento (§7 y §8) |
 | `src/main/resources/static/index.html` | Interfaz con ejemplos (legítimos y ataques) y botón "Restaurar base de datos" |
 
 Stack: Java 17+ (probado con 23), Maven, SQLite (`org.xerial:sqlite-jdbc` 3.46.1.0), sin frameworks.
@@ -173,7 +174,180 @@ validar al intérprete.
 Los ataques SQL **sí se ejecutan de verdad** sobre `ventas.db`, que es desechable y se restaura con
 el botón o con `DbInit`.
 
-## 7. Cómo ejecutar
+## 7. Métricas: cómo medimos qué tan seguro es
+
+Contar ataques bloqueados no basta: un gateway que bloquea todo es "seguro" pero inútil. Por eso se
+mide en tres familias. Todas se calculan con `Benchmark.java` sobre un conjunto etiquetado de
+salidas del LLM, cada una marcada como **legítima** o **ataque**.
+
+**Definiciones base (matriz de confusión).** Positivo = el gateway bloquea.
+
+| | El gateway bloquea | El gateway permite |
+|---|---|---|
+| **Es un ataque** | VP (verdadero positivo) | FN (falso negativo: ataque que se cuela) |
+| **Es legítima** | FP (falso positivo: uso normal bloqueado) | VN (verdadero negativo) |
+
+### 7.1 Eficacia de seguridad
+
+| Métrica | Fórmula | Qué responde | Meta |
+|---|---|---|---|
+| Tasa de éxito de ataques (ASR) sin gateway | ataques con efecto ÷ ataques | ¿Qué tan expuesta está la app sin protección? | Línea base |
+| Tasa de éxito de ataques (ASR) con gateway | ataques que pasan ÷ ataques | ¿Cuántos ataques siguen funcionando? | 0 % en el conjunto de prueba |
+| Tasa de bloqueo (recall o sensibilidad) | VP ÷ (VP + FN) | ¿Qué fracción de ataques detecta? | ≥ 95 % |
+| Bloqueo por categoría | VP ÷ ataques de la categoría | ¿Hay algún tipo de ataque débilmente cubierto? | 100 % por categoría |
+
+### 7.2 Precisión y usabilidad
+
+| Métrica | Fórmula | Qué responde | Meta |
+|---|---|---|---|
+| Tasa de falsos positivos (FPR) | FP ÷ (FP + VN) | ¿Cuánto uso legítimo rompe la seguridad? | ≤ 5 % |
+| Tasa de éxito de peticiones legítimas | legítimas que pasan **y** se ejecutan bien ÷ legítimas | ¿Los usuarios siguen pudiendo trabajar? | ≥ 95 % |
+| Precisión | VP ÷ (VP + FP) | Cuando bloquea, ¿acierta? | ≥ 0,95 |
+| F1 | 2 · precisión · recall ÷ (precisión + recall) | Equilibrio entre seguridad y usabilidad | ≥ 0,95 |
+| Exactitud | (VP + VN) ÷ total | Decisiones correctas en general | ≥ 0,95 |
+
+### 7.3 Rendimiento
+
+| Métrica | Cómo se mide | Qué responde | Meta |
+|---|---|---|---|
+| Latencia promedio del validador | `System.nanoTime()` en 500 rondas sobre todos los casos, tras calentar la JVM | ¿Cuánto tiempo agrega el gateway a cada petición? | < 1 ms |
+| Latencia p95 del validador | Percentil 95 de las mismas mediciones | ¿El peor caso habitual sigue siendo rápido? | < 1 ms |
+
+La meta de rendimiento es holgada a propósito: una llamada a un LLM tarda del orden de cientos de
+milisegundos o más, así que un validador de microsegundos no es perceptible para el usuario.
+
+**Cómo correr la medición** (no necesita el servidor y nunca toca `ventas.db`, porque trabaja sobre
+una copia temporal):
+
+```powershell
+mvn compile exec:java "-Dexec.mainClass=com.fdsi.mvp.Benchmark"
+```
+
+## 8. Estadísticas después de la solución
+
+Resultados de `Benchmark.java` del 2026-10-23 (Windows 11, Java 23). Las cifras de seguridad son
+deterministas; las de latencia variaron menos de 0,3 µs entre tres corridas.
+
+**Conjunto de prueba:** 58 salidas del LLM: 37 ataques (19 SQL, 18 comandos) y 21 legítimas
+(13 SQL, 8 comandos). Los ataques son estructurales e inofensivos: borrados sobre una copia
+temporal, lectura de tablas no autorizadas, encadenamiento de comandos de solo lectura.
+
+### 8.1 Antes y después
+
+| Indicador | Sin gateway | Con gateway |
+|---|---|---|
+| Tasa de éxito de ataques | **97,3 %** (36 de 37) | **0 %** (0 de 37) |
+| Peticiones legítimas que funcionan | 100 % (21 de 21) | **95,2 %** (20 de 21) |
+| Tiempo agregado por petición | 0 | **≈ 3 µs** promedio en SQL y **< 1 µs** en comandos |
+
+El único ataque sin efecto incluso sin gateway es `SELECT load_extension('x')`: lo frena la
+configuración por defecto de SQLite, no la aplicación. Los comandos sin gateway se cuentan como
+exitosos porque llegan al shell sin ningún control; el benchmark no los ejecuta.
+
+### 8.2 Eficacia por categoría
+
+| Vector | Categoría | Casos | Bloqueados |
+|---|---|---|---|
+| SQL | Destrucción (`DELETE`, `DROP`, `UPDATE`, `INSERT`, `ALTER`) | 5 | 100 % |
+| SQL | Fuga de datos (`secretos_demo`, `sqlite_master`) | 3 | 100 % |
+| SQL | Múltiples sentencias | 3 | 100 % |
+| SQL | Evasión (comas, subconsultas, comillas, mayúsculas mezcladas) | 5 | 100 % |
+| SQL | Funciones peligrosas (`load_extension`, `PRAGMA`, `ATTACH`) | 3 | 100 % |
+| CMD | Concatenación (`;` `&&` `\|\|` `&` salto de línea) | 5 | 100 % |
+| CMD | Tubería (`\|`) | 1 | 100 % |
+| CMD | Sustitución (`` ` `` y `$( )`) | 2 | 100 % |
+| CMD | Redirección (`>` `<`) | 2 | 100 % |
+| CMD | Verbo fuera de la allow-list | 4 | 100 % |
+| CMD | Argumentos no permitidos | 4 | 100 % |
+
+### 8.3 Precisión y usabilidad
+
+| VP | FP | FN | VN | Precisión | Recall | F1 | Exactitud | Falsos positivos |
+|---|---|---|---|---|---|---|---|---|
+| 37 | 1 | 0 | 20 | 0,974 | 1,000 | 0,987 | 0,983 | 4,8 % |
+
+**El falso positivo:** una consulta legítima con `WITH` (expresión de tabla común) se bloquea porque
+el validador exige que la consulta empiece por `SELECT`. Es el precio de la allow-list estricta: se
+prefiere bloquear una consulta válida poco común antes que dejar pasar una forma no revisada. Si los
+usuarios la necesitaran, se agrega como forma permitida y se vuelve a medir.
+
+### 8.4 Rendimiento
+
+| Validador | Promedio | p95 |
+|---|---|---|
+| `SqlValidator` | 2,6 – 2,8 µs | 8,2 – 8,4 µs |
+| `CommandValidator` | 0,7 – 0,8 µs | 1,5 – 1,7 µs |
+
+Todas las metas de §7 se cumplen: ASR con gateway 0 %, recall 100 %, falsos positivos 4,8 % (meta
+≤ 5 %), legítimas que funcionan 95,2 % (meta ≥ 95 %), F1 0,987 y latencia en microsegundos.
+
+### 8.5 Cómo leer estas cifras
+
+- **El 100 % es sobre nuestro conjunto de prueba, no sobre cualquier ataque posible.** Los casos los
+  escribimos conociendo las reglas, así que un atacante real podría encontrar formas que no probamos.
+  Por eso el gateway tiene una segunda barrera (solo lectura y sin shell) que limita el daño de lo
+  que se escape.
+- Con un LLM real la salida generada varía; el benchmark mide al gateway con salidas fijas para que
+  la medición sea repetible.
+- `COSTOS.md` asume una reducción de riesgo del **85 %**, por debajo del 100 % medido: es una
+  suposición conservadora coherente con el punto anterior.
+
+## 9. Cómo afecta a otros sistemas de la organización
+
+Se usa la empresa ficticia **TecnoVentas S.A.S.** de `COSTOS.md` (comercializadora de tecnología,
+45 empleados, siete ciudades). Su asistente con LLM consulta la base de datos de ventas y su equipo
+de TI usa un asistente que traduce peticiones a comandos del servidor. Los sistemas de abajo son
+**supuestos típicos** de una empresa de ese tamaño.
+
+### 9.1 Por qué el daño no se queda en la base de datos
+
+```
+ Salida del LLM sin validar
+        │
+        ├─► SQL ──► Base de datos de ventas y clientes
+        │              ├─ borra o altera ventas ───────► ERP / inventario · Facturación electrónica · Contabilidad
+        │              └─ filtra clientes y credenciales ► CRM · Correo · Tienda en línea · otros sistemas
+        │                                                  (las credenciales robadas abren puertas)
+        │
+        └─► Comando ──► Servidor de la aplicación
+                       └─ control del servidor ─────────► red interna · copias de seguridad · otros servidores
+```
+
+La aplicación con LLM suele tener **más permisos de los que necesita** y comparte red, cuentas o
+datos con otros sistemas. Por eso una sola salida maliciosa puede propagarse: lo que empieza como una
+consulta borrada termina en facturas sin soporte o en credenciales usadas en otro sistema.
+
+### 9.2 Impacto por sistema
+
+| Sistema de TecnoVentas | Cómo se afecta sin gateway | Pilar afectado | Cómo lo frena el gateway |
+|---|---|---|---|
+| **Base de datos de ventas y clientes** | Borrado o alteración de ventas; lectura de datos personales y de la tabla de credenciales | Integridad, disponibilidad, confidencialidad | Solo `SELECT` sobre `clientes` y `ventas`, conexión de solo lectura |
+| **ERP e inventario** | Si comparte la base de datos o se alimenta de ella, el stock y los pedidos quedan desactualizados o en cero | Integridad, disponibilidad | Nada se puede escribir ni borrar desde el asistente |
+| **Facturación electrónica (DIAN)** | Ventas borradas o alteradas dejan facturas sin soporte y descuadres con lo reportado | Integridad; riesgo legal y tributario | Las ventas no se pueden modificar desde el asistente |
+| **Contabilidad** | Cierres e informes calculados con datos alterados | Integridad | Igual que el anterior |
+| **CRM y marketing** | Los datos de clientes filtrados permiten fraudes o correos falsos dirigidos a ellos; incumplimiento de la Ley 1581 | Confidencialidad; riesgo legal y reputacional | Las tablas sensibles no se pueden consultar |
+| **Correo, directorio de usuarios y otros sistemas** | Las credenciales filtradas (en el MVP, `secretos_demo`) sirven para entrar a otros sistemas, sobre todo si se reutilizan | Confidencialidad, integridad | La tabla de credenciales queda fuera de la allow-list |
+| **Servidor de la aplicación** | Un comando encadenado da control del servidor con los permisos de la aplicación | Confidencialidad, integridad, disponibilidad | Solo 4 comandos de lectura, sin argumentos peligrosos y sin shell |
+| **Red interna y otros servidores** | Desde el servidor comprometido se puede intentar llegar a otros equipos | Los tres pilares | No hay forma de ejecutar comandos arbitrarios, así que no hay punto de partida |
+| **Copias de seguridad** | Si están en el mismo servidor o red, se pueden borrar o cifrar junto con los datos (ransomware) | Disponibilidad | Igual que el anterior |
+| **Tienda en línea y pasarela de pagos** | Si comparten servidor o base de datos, se exponen a los mismos daños; una caída detiene las ventas | Disponibilidad, integridad | Contiene el incidente en el asistente |
+
+### 9.3 Impacto en el negocio
+
+| Área | Efecto sin gateway |
+|---|---|
+| Operación | Ventas y despachos detenidos mientras se recupera la información (en `COSTOS.md`, 2 días ≈ 50 M COP) |
+| Legal | Sanciones de la SIC por datos personales (Ley 1581 de 2012) y problemas con la facturación electrónica |
+| Reputación | Pérdida de confianza de los clientes cuyos datos se filtraron |
+| Financiero | Pérdida anual esperada de **120 M COP** sin gateway frente a 18 M COP con gateway (`COSTOS.md`, §5 y §6) |
+
+### 9.4 Lo que el gateway no cubre
+
+El gateway reduce el radio de daño del asistente, pero la organización necesita controles
+complementarios que están **fuera de este MVP**: credenciales distintas para cada sistema (que una
+filtración no abra todo), segmentación de la red, copias de seguridad fuera de línea y monitoreo.
+
+## 10. Cómo ejecutar
 
 Requisitos: JDK 17+ y Maven 3.8+. En PowerShell, desde la carpeta del proyecto:
 
@@ -206,21 +380,6 @@ java -cp target/mvp-llm-output-handling-1.0.0-jar-with-dependencies.jar com.fdsi
 java -jar target/mvp-llm-output-handling-1.0.0-jar-with-dependencies.jar
 ```
 
-## 8. Correcciones aplicadas (2026-10-22)
-
-| # | Problema encontrado | Corrección |
-|---|---|---|
-| 1 | La conexión de solo lectura (`ventas.db?mode=ro`) no abría la BD: la consulta legítima en modo seguro fallaba | Forma URI `jdbc:sqlite:file:ventas.db?mode=ro`: lee bien y rechaza escrituras (`SQLITE_READONLY`) |
-| 2 | `mvn exec:java -Dexec.mainClass=...DbInit` ignoraba la clase y arrancaba el servidor: la BD nunca se recreaba | La clase principal pasa a ser una propiedad en `pom.xml`, que la línea de comandos sí puede cambiar |
-| 3 | En el Ataque SQL 3 la versión insegura solo ejecutaba la primera sentencia y no se veía la fuga | La versión insegura ejecuta todas las sentencias, como una app que confía en el LLM |
-| 4 | La allow-list de tablas solo revisaba la primera tabla (`FROM clientes, sqlite_master` pasaba) | Se revisan todas las tablas, subconsultas y nombres entre comillas |
-| 5 | `CommandValidator` no revisaba argumentos (`ls -la /etc` pasaba) ni `&` simple | Allow-list de argumentos y `&` añadido a los metacaracteres |
-| 6 | La versión insegura ejecutaba de verdad cualquier comando no simulado | Solo ejecuta de verdad comandos inofensivos; el resto se simula |
-| 7 | La versión segura decía "éxito" cuando el comando fallaba | Devuelve el error real |
-| 8 | Campo para pegar la API key en el código | Eliminado: solo variable de entorno o `.env` |
-| 9 | Modelo por defecto posiblemente inválido y sin aviso del modo | Modelo `claude-sonnet-5-5` por defecto; la consola indica simulador o API |
-| 10 | Avisos de SLF4J en consola y tildes rotas en la salida de PowerShell | Logger vacío (`slf4j-nop`) y salida de PowerShell en UTF-8 |
-| 11 | Solo 6 ventas y 4 clientes | 30 ventas, 10 clientes y 2 credenciales ficticias; botón para restaurar la BD |
 
 ### Limitaciones conocidas
 
@@ -229,28 +388,16 @@ java -jar target/mvp-llm-output-handling-1.0.0-jar-with-dependencies.jar
 - En Windows, `ls -la` en la versión insegura muestra un error de PowerShell (su `ls` no acepta
   `-la`). No afecta a los ejemplos de la demo.
 - Con un LLM real, la salida generada puede variar respecto a la tabla de §6.
-- No hay métricas automatizadas ni registro de auditoría (fuera de alcance).
+- No hay registro de auditoría ni contadores en producción (fuera de alcance). La medición se hace con `Benchmark.java` (§7 y §8).
 
-## 9. Guion de demo (5 minutos)
-
-1. **Contexto (30 s):** LLM05 y CVE-2024-5565. La salida del LLM se ejecuta sin validar. Presentar
-   el enfoque: un mini security gateway de salida que se pone entre el LLM y lo que se ejecuta.
-2. **SQL legítimo (30 s):** "Ejecutar ambos": las dos versiones responden igual.
-3. **SQL Ataques 2, 3 y 1 (1 min 30 s):** insegura filtra credenciales y borra las ventas; segura
-   bloquea y explica el motivo. Pulsar "Restaurar base de datos".
-4. **Command Ataques 1, 2 y 3 (1 min 30 s):** insegura "compromete" el servidor; segura bloquea por
-   metacarácter o allow-list.
-5. **Cierre (1 min):** dos capas en la versión segura: validación de la salida + mínimo privilegio
-   (solo lectura, sin shell). Allow-list en lugar de deny-list.
-
-## 10. Fuera de alcance
+## 11. Fuera de alcance
 
 - **Security Gateway completo** (proxy independiente entre cualquier aplicación y el proveedor del
   LLM): trabajo futuro. Este MVP es su capa de salida, embebida en la aplicación.
-- Métricas automatizadas y registro de auditoría.
+- Registro de auditoría y métricas en tiempo real en producción.
 - Otros tipos de salida insegura (XSS, código, texto fuera de tema).
 
-## 11. Referencias
+## 12. Referencias
 
 - OWASP Top 10 for LLM Applications 2025 — LLM05: Improper Output Handling.
 - CVE-2024-5565 — Vanna.AI, ejecución de código a partir de la salida del LLM.
