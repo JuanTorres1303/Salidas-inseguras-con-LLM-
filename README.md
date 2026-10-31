@@ -12,9 +12,9 @@ Gateway completo para LLMs.
 ## El problema
 
 Muchas aplicaciones le piden a un LLM que convierta lenguaje natural en una consulta SQL o en un
-comando del sistema, y ejecutan directamente lo que el modelo responde. Si la petición es
-maliciosa o el modelo se equivoca, el LLM genera una salida peligrosa y la aplicación la ejecuta
-con sus propios permisos. Es el mismo patrón del caso real **CVE-2024-5565 (Vanna.AI)**.
+comando del sistema, y ejecutan directamente lo que el modelo responde. Si un usuario escribe una
+inyección en el prompt o el modelo se equivoca, el LLM genera una salida peligrosa y la aplicación
+la ejecuta con sus propios permisos. Es el mismo patrón del caso real **CVE-2024-5565 (Vanna.AI)**.
 
 La idea central del seminario: **la salida del LLM es entrada no confiable** y debe validarse antes
 de ejecutarse.
@@ -32,15 +32,17 @@ de ejecutarse.
      autorizadas y solo comandos permitidos, sin encadenamientos.
   2. **Mínimo privilegio:** la base de datos se abre en solo lectura y los comandos se ejecutan sin
      intérprete de shell.
-- **Ejemplos listos en la interfaz:** casos legítimos y ataques (borrado, fuga de datos, múltiples
-  sentencias, concatenación de comandos, borrado de archivos, reverse shell).
-- **Resistente a evasiones:** el gateway también bloquea variantes como tablas ocultas en listas o
-  subconsultas, comandos en segundo plano y argumentos peligrosos.
+- **Scripts de ataque robustos:** SQL Injection y Command Injection escritas en medio de prompts
+  largos con contexto de negocio: tautologías, `UNION`, sentencias apiladas, encadenar comandos,
+  sustitución y variantes ofuscadas.
+- **Validador por tokens:** las mayúsculas mezcladas, los comentarios y los textos entre comillas no
+  sirven para esconder un ataque.
+- **Registro del gateway:** cada decisión queda en la interfaz y en `auditoria.log`, con su motivo.
 - **Base de datos de prueba** con 10 clientes, 30 ventas y credenciales ficticias como objetivo de
   los ataques, restaurable con un botón desde la interfaz.
-- **Medición automática de la seguridad:** un benchmark de 58 casos muestra que los ataques pasan de
-  un 97 % de éxito sin gateway a un **0 %** con gateway, con un 4,8 % de falsos positivos y menos de
-  10 microsegundos agregados por petición.
+- **Medición automática de la seguridad:** un benchmark de 120 casos muestra que los ataques pasan de
+  un 98,8 % de éxito sin gateway a un **1,2 %** con gateway, con un 2,8 % de falsos positivos y
+  menos de 5 microsegundos agregados por petición.
 - **Modo simulación:** funciona sin API key ni costo. Opcionalmente puede usar un LLM real.
 - **Demo segura:** los ataques de comandos más peligrosos se simulan y los de SQL afectan solo una
   base de datos local desechable.
@@ -62,8 +64,8 @@ mvn compile exec:java "-Dexec.mainClass=com.fdsi.mvp.DbInit"
 mvn compile exec:java
 ```
 
-Abrir **http://localhost:8000**, elegir un ejemplo y pulsar **"Ejecutar Ambos"** para comparar la
-versión insegura con la segura. Detener con `Ctrl+C`.
+Abrir **http://localhost:8000**, elegir un ejemplo (solo carga el prompt) y pulsar **Probar**: se envía
+a la versión sin gateway y a la versión con gateway para compararlas. Detener con `Ctrl+C`.
 
 Después de probar los ataques de borrado en la versión insegura, pulsar **"♻️ Restaurar base de
 datos"** en la interfaz (o repetir el paso 1).
@@ -77,5 +79,5 @@ mvn compile exec:java "-Dexec.mainClass=com.fdsi.mvp.Benchmark"
 ## Más detalle
 
 La documentación completa del MVP (arquitectura, controles, casos de la demo, métricas,
-estadísticas, impacto en otros sistemas de la organización y guion de presentación) está en
+estadísticas e impacto en otros sistemas de la organización) está en
 [`MVP.md`](MVP.md). El análisis costo-beneficio está en [`COSTOS.md`](COSTOS.md).

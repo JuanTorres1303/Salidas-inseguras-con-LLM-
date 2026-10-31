@@ -11,11 +11,12 @@ Cifras en pesos colombianos (COP), con la TRM de **3.174,67 COP por dólar** (17
 
 | Indicador | Valor |
 |---|---|
-| Costo de implementación, año 1 | 46.760.000 COP (≈ USD 14.700) |
-| Costo de los años siguientes | 28.760.000 COP |
-| Ahorro anual (pérdidas esperadas evitadas) | 102.000.000 COP |
-| Retorno de la inversión en seguridad (ROSI), año 1 | ≈ 118 % |
-| Recuperación de la inversión | ≈ 5,5 meses |
+| Dueña del asistente y del gateway | **TecnoVentas** |
+| Lo que cobramos el año 1 | **50.000.000 COP** (≈ USD 15.750) |
+| Lo que cobramos los años siguientes | **30.800.000 COP** |
+| Ahorro anual para TecnoVentas (pérdidas esperadas evitadas) | 102.000.000 COP |
+| Retorno de la inversión en seguridad (ROSI), año 1 | ≈ 104 % |
+| Recuperación de la inversión | ≈ 5,9 meses |
 | Costo del LLM por tokens (aparte) | ≈ 7.500 a 151.000 COP al mes |
 
 ## 1. La empresa
@@ -49,9 +50,23 @@ Implementar el **mini security gateway de salida** del MVP como una capa entre e
 1. **Validación de la salida con allow-list:** solo consultas `SELECT` sobre tablas autorizadas y solo
    comandos permitidos, sin encadenamientos (`SqlValidator`, `CommandValidator`).
 2. **Mínimo privilegio:** base de datos en solo lectura y comandos sin intérprete de shell.
-3. Para producción se añaden registro de auditoría, alertas y pruebas de seguridad.
+3. Para producción se añaden alertas y pruebas de seguridad.
 
-## 4. Costo de implementación
+## 3.1 Quién se queda con qué
+
+**TecnoVentas es la dueña.** Nosotros somos el proveedor que lo implementa y lo mantiene.
+
+| Elemento | Dueño | Qué pasa si termina el contrato |
+|---|---|---|
+| Asistente con LLM, sus datos y sus registros | TecnoVentas | Sigue siendo suyo |
+| Código del gateway y sus reglas | TecnoVentas: se le entrega al final del proyecto | Lo conserva y su equipo de TI puede mantenerlo |
+| Modelo de lenguaje (LLM) | Anthropic: TecnoVentas tiene la cuenta y paga los tokens directamente | No depende de nosotros |
+| Nuestro trabajo | Desarrollo, pentest, capacitación y mantenimiento anual | Deja de cobrarse |
+
+Así TecnoVentas no queda amarrada a nosotros: paga por un servicio, no por el derecho a usar lo que ya
+compró.
+
+## 4. Costo de implementación y lo que cobramos
 
 | Concepto | Supuesto y fuente | Costo (COP) |
 |---|---|---|
@@ -62,6 +77,27 @@ Implementar el **mini security gateway de salida** del MVP como una capa entre e
 | Capacitación al equipo | Taller interno de uso seguro de LLMs (supuesto) | 2.000.000 |
 | **Total año 1** | | **46.760.000** (≈ USD 14.700) |
 | **Total años siguientes** | Infraestructura, mantenimiento y un pentest de control al año | **28.760.000** |
+
+**Por qué baja el segundo año:** 18 M solo se pagan una vez, y lo demás se repite todos los años.
+Sobre ese costo cobramos un margen del **7 %**.
+
+| Concepto | Año 1 (COP) | Años siguientes (COP) | ¿Se repite? |
+|---|---|---|---|
+| Desarrollo e integración | 16.000.000 | 0 | No, el gateway ya queda construido |
+| Capacitación al equipo | 2.000.000 | 0 | No, el equipo ya queda capacitado |
+| Pentest | 16.000.000 | 16.000.000 | Sí, las amenazas cambian: una prueba al año |
+| Mantenimiento | 12.000.000 | 12.000.000 | Sí, actualizar reglas y atender incidentes |
+| Infraestructura y logs | 760.000 | 760.000 | Sí, el servidor se paga cada mes |
+| **Costo** | **46.760.000** | **28.760.000** | |
+| Margen (≈ 7 %) | 3.240.000 | 2.040.000 | |
+| **Lo que cobramos** | **50.000.000** | **30.800.000** | |
+
+El cobro baja 19,2 M: los 18 M que no se repiten y 1,2 M de margen sobre ellos.
+
+**Por qué cobramos 50 M el primer año:** son los 46,8 M que cuesta el proyecto más nuestro margen, y
+el primer año es el más caro porque incluye construir el gateway y capacitar al equipo. Ese margen es
+lo que nos deja sostener el servicio. Con él, TecnoVentas sigue recuperando lo invertido en menos de
+seis meses.
 
 ## 4.1 Costo del LLM por tokens
 
@@ -114,21 +150,23 @@ un valor mucho menor. Las probabilidades anuales son supuestos del caso.
 
 ## 6. Ahorro y retorno
 
-Se asume que el gateway reduce el riesgo en un 85 %, porque bloquea los tres vectores de la demo y la
-segunda barrera (solo lectura y sin shell) contiene lo que se escape del validador.
+Se asume que el gateway reduce el riesgo en un 85 %, un valor conservador: en el benchmark bloquea el
+98,8 % de los ataques (`MVP.md`, §8), pero esos casos los escribimos nosotros. La segunda barrera (solo
+lectura y sin shell) contiene lo que se escape del validador.
 
 | Indicador | Valor |
 |---|---|
 | Pérdida esperada sin gateway | 120.000.000 COP/año |
 | Pérdida residual con gateway (15 %) | 18.000.000 COP/año |
 | **Ahorro anual (reducción de riesgo)** | **102.000.000 COP** |
-| Costo año 1 | 46.760.000 COP |
-| **Retorno de la inversión en seguridad (ROSI), año 1** | (102 − 46,8) / 46,8 ≈ **118 %** |
-| ROSI años siguientes | (102 − 28,8) / 28,8 ≈ **254 %** |
-| **Recuperación de la inversión** | 46,8 ÷ 102 × 12 ≈ **5,5 meses** |
+| Lo que paga TecnoVentas, año 1 | 50.000.000 COP |
+| Lo que paga TecnoVentas, años siguientes | 30.800.000 COP |
+| **Retorno de la inversión en seguridad (ROSI), año 1** | (102 − 50) / 50 ≈ **104 %** |
+| ROSI años siguientes | (102 − 30,8) / 30,8 ≈ **231 %** |
+| **Recuperación de la inversión** | 50 ÷ 102 × 12 ≈ **5,9 meses** |
 
-Por cada peso invertido el primer año, TecnoVentas evita unos 2,2 pesos de pérdidas esperadas; desde
-el segundo año, unos 3,5.
+Por cada peso invertido el primer año, TecnoVentas evita unos 2 pesos de pérdidas esperadas; desde el
+segundo año, unos 3,3.
 
 ## 7. Conclusión
 

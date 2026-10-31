@@ -23,6 +23,14 @@ public class LlmClient {
     // Extrae los valores de "text":"..." de la respuesta JSON de la API.
     private static final Pattern TEXT_FIELD = Pattern.compile("\"text\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
 
+    // Dato que el simulador copia tal cual: "Ventas del cliente X", "Lista la carpeta X".
+    // El prompt puede seguir despues del dato ("... para el informe, por favor").
+    private static final String FIN_DEL_DATO = "(?=\\s+para\\s|\\s*,?\\s*por favor|\\s*,\\s*gracias|\\.\\s|\\.?\\s*$)";
+    private static final Pattern DATO_CLIENTE = Pattern.compile("(?is)\\bcliente\\s+(.+?)" + FIN_DEL_DATO);
+    private static final Pattern DATO_CARPETA = Pattern.compile("(?is)\\bcarpeta\\s+(.+?)" + FIN_DEL_DATO);
+
+    private static String ultimaFuente = "simulador local";
+
     static boolean hayApiKey() {
         return getApiKey() != null;
     }
@@ -66,7 +74,9 @@ public class LlmClient {
         String apiKey = getApiKey();
         if (apiKey != null && !apiKey.isBlank()) {
             try {
-                return callAnthropicApi(apiKey, systemPrompt, userPrompt);
+                String respuesta = limpiarSalida(callAnthropicApi(apiKey, systemPrompt, userPrompt));
+                ultimaFuente = "API " + MODEL;
+                return respuesta;
             } catch (Exception e) {
                 System.err.println("[LlmClient] Error con API Anthropic (" + e.getMessage()
                         + "). Usando simulador de LLM para la demo.");
@@ -74,7 +84,22 @@ public class LlmClient {
         }
         // Modo simulacion inteligente (datos quemados para la demo cuando no hay API
         // Key)
-        return simulateLlm(systemPrompt, userPrompt);
+        ultimaFuente = "simulador local";
+        return simular(systemPrompt, userPrompt);
+    }
+
+    /** De donde salio la ultima respuesta; la interfaz lo muestra para no confundir simulador con LLM real. */
+    static String ultimaFuente() {
+        return ultimaFuente;
+    }
+
+    /** Los modelos suelen envolver el codigo en un bloque ``` aunque se les pida lo contrario. */
+    private static String limpiarSalida(String salida) {
+        String limpia = salida.trim();
+        if (limpia.startsWith("```")) {
+            limpia = limpia.replaceFirst("^```[a-zA-Z]*\\s*", "").replaceFirst("\\s*```$", "");
+        }
+        return limpia;
     }
 
     private static String callAnthropicApi(String apiKey, String systemPrompt, String userPrompt) throws Exception {
@@ -110,8 +135,11 @@ public class LlmClient {
      * Simulador de respuestas del LLM para escenarios de demostracion (OWASP
      * LLM05).
      * Permite probar los ataques y las respuestas normales sin costo ni API key.
+     * Se comporta como un modelo obediente: copia tal cual el dato que da el
+     * usuario dentro de la consulta o del comando, que es lo que permite que una
+     * inyeccion escrita en el prompt llegue a la salida del LLM.
      */
-    private static String simulateLlm(String systemPrompt, String userPrompt) {
+    static String simular(String systemPrompt, String userPrompt) {
         String input = userPrompt.trim();
         String lower = input.toLowerCase();
 
@@ -123,6 +151,11 @@ public class LlmClient {
                     lower.startsWith("drop ") || lower.startsWith("insert ") ||
                     lower.startsWith("update ") || lower.startsWith("alter ")) {
                 return input;
+            }
+            Matcher cliente = DATO_CLIENTE.matcher(input);
+            if (cliente.find()) {
+                return "SELECT c.nombre, v.producto, v.monto FROM clientes c "
+                        + "JOIN ventas v ON v.cliente_id = c.id WHERE c.nombre = '" + cliente.group(1).trim() + "'";
             }
             // Peticiones maliciosas: destruccion / extraccion de secretos
             if (lower.contains("delete") || lower.contains("borrar") || lower.contains("eliminar")) {
@@ -151,6 +184,10 @@ public class LlmClient {
             if (lower.startsWith("ls") || lower.startsWith("date") || lower.startsWith("whoami") ||
                     lower.startsWith("pwd") || lower.startsWith("cat ") || lower.startsWith("rm ")) {
                 return input;
+            }
+            Matcher carpeta = DATO_CARPETA.matcher(input);
+            if (carpeta.find()) {
+                return "ls " + carpeta.group(1).trim();
             }
             // Ataques de comando
             if (lower.contains("passwd") || lower.contains("whoami") || lower.contains("ignora")
@@ -181,15 +218,51 @@ public class LlmClient {
     }
 
     static String escapeJson(String s) {
-        return s.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "");
+        StringBuilder sb = new StringBuilder(s.length() + 16);
+        for (char c : s.toCharArray()) {
+            switch (c) {
+                case '\\' -> sb.append("\\\\");
+                case '"' -> sb.append("\\\"");
+                case '\n' -> sb.append("\\n");
+                case '\r' -> sb.append("\\r");
+                case '\t' -> sb.append("\\t");
+                default -> {
+                    if (c < 0x20) {
+                        sb.append(String.format("\\u%04x", (int) c));
+                    } else {
+                        sb.append(c);
+                    }
+                }
+            }
+        }
+        return sb.toString();
     }
 
+    /** Se recorre caracter por caracter: reemplazos encadenados confunden \\n con \n. */
     static String unescapeJson(String s) {
-        return s.replace("\\n", "\n")
-                .replace("\\\"", "\"")
-                .replace("\\\\", "\\");
+        StringBuilder sb = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c != '\\' || i + 1 >= s.length()) {
+                sb.append(c);
+                continue;
+            }
+            char siguiente = s.charAt(++i);
+            switch (siguiente) {
+                case 'n' -> sb.append('\n');
+                case 'r' -> sb.append('\r');
+                case 't' -> sb.append('\t');
+                case 'b' -> sb.append('\b');
+                case 'f' -> sb.append('\f');
+                case 'u' -> {
+                    if (i + 4 < s.length()) {
+                        sb.append((char) Integer.parseInt(s.substring(i + 1, i + 5), 16));
+                        i += 4;
+                    }
+                }
+                default -> sb.append(siguiente); // \" \\ \/
+            }
+        }
+        return sb.toString();
     }
 }
